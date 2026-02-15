@@ -1,11 +1,9 @@
 from codecs import xmlcharrefreplace_errors
-
 import requests
 import logging
 from bs4 import BeautifulSoup
 from datetime import date
 #import pytesseract
-
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -16,6 +14,7 @@ seznam_restauraci = {
     "jidlovice": "https://www.jidlovice.cz/telehouse/",
     "jidelna17": "https://www.jidelna17.cz/tydenni-menu",
 }
+#dictionary = {"key": "value"}
 
 def get_web(url):
     response = requests.get(url)
@@ -34,7 +33,6 @@ def get_jidlovice_api():
 
 
 def scrape_jidlovice(jidlovice_dict):
-
     try:
         menu = []
         for jedno_jidlo in jidlovice_dict["menu_items"]:
@@ -46,40 +44,31 @@ def scrape_jidlovice(jidlovice_dict):
             menu.append(dict)
         print(menu)
         return menu
-
-
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
 def scrape_kulatak(page):
-
     try:
         container = page.find(attrs={"class": "elementor-element-425aa18"})
         paragraphs = container.find_all('p')
         for jeden_paragraf in paragraphs:
             text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "")
-
             if text_paragrafu != "":
                 print(text_paragrafu)
-
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
 def scrape_jidelna17(page):
-
     try:
         container = page.find(attrs={"id": "pondeli"})
         row_jidel = container.find_all(attrs={"class": "food-menu__list-item-row"})
-
-
         menu = []
         for jidlo in row_jidel:
-
             element_jidlo = jidlo.find(attrs={"class": "food-menu__list-item-title"})
             if element_jidlo is None:
                 continue
-            text_jidlo = element_jidlo.get_text().strip()
 
+            text_jidlo = element_jidlo.get_text().strip()
             text_cena = jidlo.find(attrs={"class": "food-menu__list-item-price"}).get_text()
             dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
             menu.append(dic)
@@ -88,21 +77,25 @@ def scrape_jidelna17(page):
         pprint(menu)
         return menu
 
-
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
+def restaurants_all():
+    vsechny_restaurants = {}
 
-for NAZEV_RESTAURACE, url in seznam_restauraci.items():
+    for NAZEV_RESTAURACE, url in seznam_restauraci.items():
+        if NAZEV_RESTAURACE == "restaurant_kulatak":
+            scrape_kulatak(get_web(url))
 
-    if NAZEV_RESTAURACE == "restaurant_kulatak":
-        scrape_kulatak(get_web(url))
+        elif NAZEV_RESTAURACE == "jidlovice":
+            scraped_jidlovice = scrape_jidlovice(get_jidlovice_api())
+            vsechny_restaurants[NAZEV_RESTAURACE] = scraped_jidlovice
 
-    elif NAZEV_RESTAURACE == "jidlovice":
-        scrape_jidlovice(get_jidlovice_api())
+        elif NAZEV_RESTAURACE == "jidelna17":
+            scraped_jidelna17 = scrape_jidelna17(get_web(url))
+            vsechny_restaurants[NAZEV_RESTAURACE] = scraped_jidelna17
 
-    elif NAZEV_RESTAURACE == "jidelna17":
-        scrape_menu = scrape_jidelna17(get_web(url))
+    return vsechny_restaurants
 
-    else:
-        print("Máš hlad? Tak si ho hlad")
+if __name__ == "__main__":
+    restaurants_all()

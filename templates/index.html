@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+
+<h1>
+  Dáme oběd
+</h1>
+
+{% for nazev_restaurace, menu in restaurants.items() %}
+    <h1>{{ nazev_restaurace }}</h1>
+
+    <table border="1">
+        <tr>
+            <th>Název</th>
+            <th>Cena</th>
+        </tr>
+
+        {% for pokrm in menu %}
+            <tr>
+                <td> {{ pokrm.text_jidlo }} </td>
+                <td> {{ pokrm.text_cena }} </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endfor %}
+
+<h3></h3>
+
+</body>
+</html>
