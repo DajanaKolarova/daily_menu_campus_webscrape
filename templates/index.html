@@ -7,25 +7,29 @@
 <body>
 
 <h1>
-  Dáme oběd
+  Dáme oběd na kampusu
 </h1>
 
 {% for nazev_restaurace, menu in restaurants.items() %}
-    <h1>{{ nazev_restaurace }}</h1>
+    <h2>{{ nazev_restaurace }}</h2>
 
-    <table border="1">
-        <tr>
-            <th>Název</th>
-            <th>Cena</th>
-        </tr>
-
-        {% for pokrm in menu %}
+    {% if menu is none %}
+        Dneska se tady neobědvá :( error
+    {% else %}
+        <table border="1">
             <tr>
-                <td> {{ pokrm.text_jidlo }} </td>
-                <td> {{ pokrm.text_cena }} </td>
+                <th>Název</th>
+                <th>Cena</th>
             </tr>
-        {% endfor %}
-    </table>
+
+            {% for pokrm in menu %}
+                <tr>
+                    <td> {{ pokrm.text_jidlo }} </td>
+                    <td> {{ pokrm.text_cena }} </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endif %}
 {% endfor %}
 
 <h3></h3>

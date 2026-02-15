@@ -10,26 +10,32 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 seznam_restauraci = {
-    "restaurant_kulatak": "https://kulatak.cz/#menu-obsah",
     "jidlovice": "https://www.jidlovice.cz/telehouse/",
     "jidelna17": "https://www.jidelna17.cz/tydenni-menu",
+    "restaurant_kulatak": "https://kulatak.cz/#menu-obsah",
 }
 #dictionary = {"key": "value"}
 
 def get_web(url):
-    response = requests.get(url)
-    page_html = response.text # pomocná proměnná
+    try:
+        response = requests.get(url)
+        page_html = response.text # pomocná proměnná
+        page = BeautifulSoup(page_html)  # veme html co jsme stahli a zparsuje ten STRING plnej html ho do actual python objektu (napr. listy, dictionaries...)
+        return page
 
-    page = BeautifulSoup(page_html)  # veme html co jsme stahli a zparsuje ten STRING plnej html ho do actual python objektu (napr. listy, dictionaries...)
-    return page
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
 
 
 def get_jidlovice_api():
-    dnesni_datum = date.today().strftime('%Y-%m-%d')
-    url = "https://jidlovice.cz/api/v1/branch/3/menu/" + dnesni_datum
-    response = requests.get(url)
-    jidlovice_dict = response.json()
-    return jidlovice_dict
+    try:
+        dnesni_datum = date.today().strftime('%Y-%m-%d')
+        url = "https://jidlovice.cz/api/v1/branch/3/menu/" + dnesni_datum
+        response = requests.get(url)
+        jidlovice_dict = response.json()
+        return jidlovice_dict
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
 
 
 def scrape_jidlovice(jidlovice_dict):
@@ -49,12 +55,17 @@ def scrape_jidlovice(jidlovice_dict):
 
 def scrape_kulatak(page):
     try:
+        menu = []
         container = page.find(attrs={"class": "elementor-element-425aa18"})
-        paragraphs = container.find_all('p')
+        paragraphs = container.find_all('p', attrs={"style": "text-align: center;"})
+
         for jeden_paragraf in paragraphs:
             text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "")
             if text_paragrafu != "":
-                print(text_paragrafu)
+                dict = {"text_jidlo": text_paragrafu, "text_cena": 0}
+                menu.append(dict)
+        print(menu)
+        return menu
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
@@ -72,7 +83,6 @@ def scrape_jidelna17(page):
             text_cena = jidlo.find(attrs={"class": "food-menu__list-item-price"}).get_text()
             dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
             menu.append(dic)
-
         from pprint import pprint
         pprint(menu)
         return menu
@@ -80,20 +90,22 @@ def scrape_jidelna17(page):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
+
 def restaurants_all():
     vsechny_restaurants = {}
 
     for NAZEV_RESTAURACE, url in seznam_restauraci.items():
         if NAZEV_RESTAURACE == "restaurant_kulatak":
-            scrape_kulatak(get_web(url))
+            scraped_kulatak = scrape_kulatak(get_web(url))
+            vsechny_restaurants["Kulaťák"] = scraped_kulatak
 
         elif NAZEV_RESTAURACE == "jidlovice":
             scraped_jidlovice = scrape_jidlovice(get_jidlovice_api())
-            vsechny_restaurants[NAZEV_RESTAURACE] = scraped_jidlovice
+            vsechny_restaurants["Jídlovice Telehouse"] = scraped_jidlovice
 
         elif NAZEV_RESTAURACE == "jidelna17":
             scraped_jidelna17 = scrape_jidelna17(get_web(url))
-            vsechny_restaurants[NAZEV_RESTAURACE] = scraped_jidelna17
+            vsechny_restaurants["Jídelna 17"] = scraped_jidelna17
 
     return vsechny_restaurants
 
