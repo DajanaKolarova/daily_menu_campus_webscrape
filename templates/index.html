@@ -2,7 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Dáme oběd</title>
+    <style>
+        th { text-align: left; }
+        * {
+            font-family: sans-serif;
+        }
+        table {
+            table-layout: fixed;
+        }
+        .nazev {
+            width: 80vw;
+            max-width: 80vw;
+        }
+        th, td {
+            border: 1px solid #aaa;
+            padding: 6px;
+        }
+
+    </style>
 </head>
 <body>
 
@@ -16,15 +34,15 @@
     {% if menu is none %}
         Dneska se tady neobědvá :( error
     {% else %}
-        <table border="1">
+        <table>
             <tr>
-                <th>Název</th>
+                <th class="nazev">Název</th>
                 <th>Cena</th>
             </tr>
 
             {% for pokrm in menu %}
                 <tr>
-                    <td> {{ pokrm.text_jidlo }} </td>
+                    <td class="nazev"> {{ pokrm.text_jidlo }} </td>
                     <td> {{ pokrm.text_cena }} </td>
                 </tr>
             {% endfor %}
