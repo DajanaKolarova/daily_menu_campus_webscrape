@@ -9,6 +9,7 @@ python flask_app.py
 
 import requests
 import logging
+import re
 from bs4 import BeautifulSoup
 from datetime import date
 
@@ -63,7 +64,7 @@ def scrape_kulatak(page):
     try:
         menu = []
         container = page.find(attrs={"class": "elementor-element-425aa18"})
-        paragraphs = container.find_all('p', attrs={"style": "text-align: center;"})
+        paragraphs = container.find_all('p', style=re.compile(r'text-align\s*:\s*center', re.IGNORECASE))
         pomocna_prom = ""
         for jeden_paragraf in paragraphs:
             text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "")
