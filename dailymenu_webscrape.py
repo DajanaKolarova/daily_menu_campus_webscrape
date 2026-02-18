@@ -126,21 +126,31 @@ def scrape_technicka(page):
         logger.error(f"Unexpected error: {e}")
 
 def scrape_prostoru(page):
-    dnesni_datum = date.today().strftime('%d.%m.')
+    dnesni_datum = date.today().strftime('%d.%-m.')
 
     try:
         menu = []
         container = page.find("table")
         table_rows = container.find_all("tr")
         for table_row in table_rows:
-            elements_in_row = container.find_all("td")
-            if dnesni_datum in elements_in_row[0]:
-                text_jidla = elements_in_row[1]
-                text_jidla = text_jidla.split("<br>")
-                for text_jidlo in text_jidla:
-                    dic = {"text_jidlo": text_jidlo, "text_cena": 165 } #if polevka 60 if jidlo 165}
-                    menu.append(dic)
+            elements_in_row = table_row.find_all("td")
+            if len(elements_in_row) == 0:
+                continue
+            if dnesni_datum in elements_in_row[0].get_text():
+                text_jidla = str(elements_in_row[1])
+                for radek in elements_in_row[1].contents:
+                    if str(radek) == "<br/>":
+                        continue
+                    else:
+                        text_jidlo = radek.get_text()
+                        if "Polévka" in text_jidlo:
+                                text_cena = "60"
+                        else:
+                                text_cena = "165"
+                        dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
+                        menu.append(dic)
         logging.debug(menu)
+        return menu
 
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
