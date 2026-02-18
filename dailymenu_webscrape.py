@@ -20,6 +20,8 @@ seznam_restauraci = {
     "jidlovice": "https://www.jidlovice.cz/telehouse/",
     "jidelna17": "https://www.jidelna17.cz/tydenni-menu",
     "restaurant_kulatak": "https://kulatak.cz/#menu-obsah",
+    "cafe_prostoru": "https://streva.prostoru.cz/jidelnicekvlozeny.php",
+    #"uTopolu": "http://www.utopolu.cz/menu",
 }
 
 def get_web(url):
@@ -50,7 +52,6 @@ def scrape_jidlovice(jidlovice_dict):
             nazev_jidla = jedno_jidlo["meal"]["name"]
             popis_jidla = jedno_jidlo["meal"]["description"]
             cena_jidla = jedno_jidlo["meal"]["price"]
-
             dict = {"text_jidlo": nazev_jidla + popis_jidla, "text_cena": cena_jidla}
             menu.append(dict)
         logging.debug(menu)
@@ -63,26 +64,26 @@ def scrape_kulatak(page):
         menu = []
         container = page.find(attrs={"class": "elementor-element-425aa18"})
         paragraphs = container.find_all('p', attrs={"style": "text-align: center;"})
-
         pomocna_prom = ""
-
         for jeden_paragraf in paragraphs:
             text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "")
             if text_paragrafu != "":
                 if (text_paragrafu[0].isdigit() and text_paragrafu[1] == ")") or "Specialita týdne" in text_paragrafu:
                     pomocna_prom += text_paragrafu
-
                     continue
-
                 if pomocna_prom != "":
                     if ",-" in text_paragrafu:
-                        dict = {"text_jidlo": pomocna_prom, "text_cena": text_paragrafu}
+                        if len(text_paragrafu) > 6:
+                            dict = {"text_jidlo": pomocna_prom + " " + text_paragrafu[0:-5], "text_cena": text_paragrafu[-5:]} #lepší by bylo opmocí regexpu ale bolí mě z toho hlava
+                            pass
+                        else:
+                            dict = {"text_jidlo": pomocna_prom, "text_cena": text_paragrafu}
                         pomocna_prom = ""
                         menu.append(dict)
                     else:
-                        pomocna_prom += text_paragrafu
+                        pomocna_prom += " " + text_paragrafu
 # použít regexp protože najednou dali cenu do stejnýho paragrafu jako zbytek jídla
-        # ještě vyřešit specialitu týdne která pomocna proměnná najít specialitu týdne a pak to xo je za toim
+# ještě vyřešit specialitu týdne která pomocna proměnná najít specialitu týdne a pak to xo je za toim
         logging.debug(menu)
         return menu
     except Exception as e:
@@ -124,6 +125,27 @@ def scrape_technicka(page):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
+def scrape_prostoru(page):
+    dnesni_datum = date.today().strftime('%d.%m.')
+
+    try:
+        menu = []
+        container = page.find("table")
+        table_rows = container.find_all("tr")
+        for table_row in table_rows:
+            elements_in_row = container.find_all("td")
+            if dnesni_datum in elements_in_row[0]:
+                text_jidla = elements_in_row[1]
+                text_jidla = text_jidla.split("<br>")
+                for text_jidlo in text_jidla:
+                    dic = {"text_jidlo": text_jidlo, "text_cena": 165 } #if polevka 60 if jidlo 165}
+                    menu.append(dic)
+        logging.debug(menu)
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise e
+
 def restaurants_all():
     vsechny_restaurants = {}
     for NAZEV_RESTAURACE, url in seznam_restauraci.items():
@@ -139,6 +161,10 @@ def restaurants_all():
         elif NAZEV_RESTAURACE == "jidelna17":
             scraped_jidelna17 = scrape_jidelna17(get_web(url))
             vsechny_restaurants["Jídelna 17"] = scraped_jidelna17
+        elif NAZEV_RESTAURACE == "cafe_prostoru":
+            scraped_cafe_prostoru = scrape_prostoru(get_web(url))
+            vsechny_restaurants["Café Prostoru"] = scraped_cafe_prostoru
     return vsechny_restaurants
+
 if __name__ == "__main__":
     restaurants_all()
