@@ -54,7 +54,7 @@ def scrape_jidlovice(jidlovice_dict):
             nazev_jidla = jedno_jidlo["meal"]["name"]
             popis_jidla = jedno_jidlo["meal"]["description"]
             cena_jidla = jedno_jidlo["meal"]["price"]
-            dict = {"text_jidlo": nazev_jidla + popis_jidla, "text_cena": cena_jidla}
+            dict = {"text_jidlo": nazev_jidla + (popis_jidla if popis_jidla is not None else ""), "text_cena": cena_jidla}
             menu.append(dict)
         logging.debug(menu)
         return menu
