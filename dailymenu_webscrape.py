@@ -1,6 +1,6 @@
 from codecs import xmlcharrefreplace_errors
 '''
-termninal
+terminal command:
 python -m venv prostredi     
 source prostredi/bin/activate
 pip install -r requirements.txt
@@ -22,7 +22,8 @@ seznam_restauraci = {
     "jidelna17": "https://www.jidelna17.cz/tydenni-menu",
     "restaurant_kulatak": "https://kulatak.cz/#menu-obsah",
     "cafe_prostoru": "https://streva.prostoru.cz/jidelnicekvlozeny.php",
-    #"uTopolu": "http://www.utopolu.cz/menu",
+    "studentska_menza": "https://agata.suz.cvut.cz/jidelnicky/index.php?clPodsystem=2&lang=cs",
+#"uTopolu": "http://www.utopolu.cz/menu",
 }
 
 def get_web(url):
@@ -126,6 +127,25 @@ def scrape_technicka(page):
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
 
+def scrape_studentska(page):
+    try:
+        menu = []
+        containers = page.select("div.col.d-flex.flex-column.h-100")
+        for container in containers:
+            text_jidlo = container.find(attrs={"class": "card-title mb-1"}).get_text()
+            text_cena = container.find(attrs={"class": "badge cena-badge me-2"}).get_text()
+            dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
+            menu.append(dic)
+        logging.debug(menu)
+        #zkontroluj že menu není prázdný, pokud ano použij týdenní menu
+        #  raise NotImplementedError("jeste to nemam hotovy")
+        if len(menu) == 0: ## if not menu
+            pass
+        return menu
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
+
 def scrape_prostoru(page):
     dnesni_datum = date.today().strftime('%d.%-m.')
 
@@ -163,6 +183,9 @@ def restaurants_all():
         if NAZEV_RESTAURACE == "technicka_menza":
             scraped_technicka_menza = scrape_technicka(get_web(url))
             vsechny_restaurants["Technická menza"] = scraped_technicka_menza
+        elif NAZEV_RESTAURACE == "studentska_menza":
+            scraped_technicka_menza = scrape_technicka(get_web(url))
+            vsechny_restaurants["Studentská menza"] = scraped_technicka_menza
         elif NAZEV_RESTAURACE == "jidlovice":
             scraped_jidlovice = scrape_jidlovice(get_jidlovice_api())
             vsechny_restaurants["Jídlovice Telehouse"] = scraped_jidlovice
