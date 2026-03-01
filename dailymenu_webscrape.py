@@ -86,7 +86,7 @@ def scrape_kulatak(page):
                     else:
                         pomocna_prom += " " + text_paragrafu
 #použít regexp protože najednou dali cenu do stejnýho paragrafu jako zbytek jídla
-#specialita týdne která pomocna proměnná najít specialitu týdne a pak to xo je za toim
+#specialita týdne která pomocna proměnná najít specialitu týdne a pak to co je za tím
         logging.debug(menu)
         return menu
     except Exception as e:
@@ -166,7 +166,6 @@ def scrape_prostoru(page):
                                 text_cena = "60"
                         else:
                                 text_cena = "165"
-
                         dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
                         menu.append(dic)
         logging.debug(menu)
