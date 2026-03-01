@@ -1,6 +1,6 @@
 from codecs import xmlcharrefreplace_errors
 '''
-terminal command:
+spusteni v terminalu:
 python -m venv prostredi     
 source prostredi/bin/activate
 pip install -r requirements.txt
@@ -24,13 +24,14 @@ seznam_restauraci = {
     "cafe_prostoru": "https://streva.prostoru.cz/jidelnicekvlozeny.php",
     "studentska_menza": "https://agata.suz.cvut.cz/jidelnicky/index.php?clPodsystem=2&lang=cs",
 #"uTopolu": "http://www.utopolu.cz/menu",
+#"U Petnika": "",
 }
 
 def get_web(url):
     try:
         response = requests.get(url)
         page_html = response.text
-        page = BeautifulSoup(page_html, features="html.parser") # veme html co jsme stahli a zparsuje ten STRING plnej html ho do actual python objektu
+        page = BeautifulSoup(page_html, features="html.parser") # veme html co se stahl a zparsuje ten STRING plnej html ho do actual python objektu
         return page
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
@@ -51,10 +52,10 @@ def scrape_jidlovice(jidlovice_dict):
     try:
         menu = []
         for jedno_jidlo in jidlovice_dict["menu_items"]:
-            nazev_jidla = jedno_jidlo["meal"]["name"]
+            nazev_jidla = jedno_jidlo["meal"]["name"] #nested dictionary - value může být cokoli - i další dictionary
             popis_jidla = jedno_jidlo["meal"]["description"]
             cena_jidla = jedno_jidlo["meal"]["price"]
-            dict = {"text_jidlo": nazev_jidla + (popis_jidla if popis_jidla is not None else ""), "text_cena": cena_jidla}
+            dict = {"text_jidlo": nazev_jidla + (popis_jidla if popis_jidla is not None else ""), "text_cena": cena_jidla} #debug, jinak když chybí třeba popis nebo název tak to tady crashlo
             menu.append(dict)
         logging.debug(menu)
         return menu
@@ -65,18 +66,18 @@ def scrape_kulatak(page):
     try:
         menu = []
         container = page.find(attrs={"class": "elementor-element-425aa18"})
-        paragraphs = container.find_all('p', style=re.compile(r'text-align\s*:\s*center', re.IGNORECASE))
+        paragraphs = container.find_all('p', style=re.compile(r'text-align\s*:\s*center', re.IGNORECASE)) #regex protože každý den mají to html trochu jiný
         pomocna_prom = ""
         for jeden_paragraf in paragraphs:
-            text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "")
+            text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "") # .strip zbaví zbytečných mezer .replace nový řádek za prázdný string
             if text_paragrafu != "":
-                if (text_paragrafu[0].isdigit() and text_paragrafu[1] == ")") or "Specialita týdne" in text_paragrafu:
+                if (text_paragrafu[0].isdigit() and text_paragrafu[1] == ")") or "Specialita týdne" in text_paragrafu: #jejich formátování denní nabídky číslo) nebo týdenní specialita
                     pomocna_prom += text_paragrafu
                     continue
                 if pomocna_prom != "":
                     if ",-" in text_paragrafu:
                         if len(text_paragrafu) > 6:
-                            dict = {"text_jidlo": pomocna_prom + " " + text_paragrafu[0:-5], "text_cena": text_paragrafu[-5:]} #lepší by bylo opmocí regexpu ale bolí mě z toho hlava
+                            dict = {"text_jidlo": pomocna_prom + " " + text_paragrafu[0:-5], "text_cena": text_paragrafu[-5:]} #oddělení ceny od popisu pomocí indexování a slicingu protože regex je ouvej
                             pass
                         else:
                             dict = {"text_jidlo": pomocna_prom, "text_cena": text_paragrafu}
@@ -84,8 +85,8 @@ def scrape_kulatak(page):
                         menu.append(dict)
                     else:
                         pomocna_prom += " " + text_paragrafu
-# použít regexp protože najednou dali cenu do stejnýho paragrafu jako zbytek jídla
-# ještě vyřešit specialitu týdne která pomocna proměnná najít specialitu týdne a pak to xo je za toim
+#použít regexp protože najednou dali cenu do stejnýho paragrafu jako zbytek jídla
+#specialita týdne která pomocna proměnná najít specialitu týdne a pak to xo je za toim
         logging.debug(menu)
         return menu
     except Exception as e:
@@ -137,9 +138,7 @@ def scrape_studentska(page):
             dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
             menu.append(dic)
         logging.debug(menu)
-        #zkontroluj že menu není prázdný, pokud ano použij týdenní menu
-        #  raise NotImplementedError("jeste to nemam hotovy")
-        if len(menu) == 0: ## if not menu
+        if len(menu) == 0:
             pass
         return menu
     except Exception as e:
@@ -148,7 +147,6 @@ def scrape_studentska(page):
 
 def scrape_prostoru(page):
     dnesni_datum = date.today().strftime('%d.%-m.')
-
     try:
         menu = []
         container = page.find("table")
@@ -158,21 +156,21 @@ def scrape_prostoru(page):
             if len(elements_in_row) == 0:
                 continue
             if dnesni_datum in elements_in_row[0].get_text():
-                text_jidla = str(elements_in_row[1])
+
                 for radek in elements_in_row[1].contents:
                     if str(radek) == "<br/>":
                         continue
                     else:
                         text_jidlo = radek.get_text()
-                        if "Polévka" in text_jidlo:
+                        if "Polévka" in text_jidlo:  #hardcoded cena jídla protože je mají pro všechny stejné
                                 text_cena = "60"
                         else:
                                 text_cena = "165"
+
                         dic = {"text_jidlo": text_jidlo, "text_cena": text_cena}
                         menu.append(dic)
         logging.debug(menu)
         return menu
-
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         raise e
