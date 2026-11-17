@@ -7,6 +7,8 @@ pip install -r requirements.txt
 python flask_app.py
 '''
 
+import os
+import subprocess
 import requests
 import logging
 import re
@@ -23,9 +25,12 @@ seznam_restauraci = {
     "restaurant_kulatak": "https://kulatak.cz/#menu-obsah",
     "cafe_prostoru": "https://streva.prostoru.cz/jidelnicekvlozeny.php",
     "studentska_menza": "https://agata.suz.cvut.cz/jidelnicky/index.php?clPodsystem=2&lang=cs",
-#"uTopolu": "http://www.utopolu.cz/menu",
+    "utopolu": "http://www.utopolu.cz/menu",
 #"U Petnika": "",
 }
+
+# OCR: Tesseract binary + Czech model stored in the project (./tessdata/ces.traineddata)
+TESSDATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tessdata")
 
 def get_web(url):
     try:
@@ -53,6 +58,9 @@ def scrape_jidlovice(jidlovice_dict):
         menu = []
         for jedno_jidlo in jidlovice_dict["menu_items"]:
             nazev_jidla = jedno_jidlo["meal"]["name"] #nested dictionary - value může být cokoli - i další dictionary
+            # výjimka: jídla ve sklenici/skle na domů ("0,33l sklenice", "0,66l sklo(2 porce)") nechceme
+            if re.search(r"\d+(?:[.,]\d+)?\s*l\s*skl(?:enice|o)", nazev_jidla, re.IGNORECASE):
+                continue
             popis_jidla = jedno_jidlo["meal"]["description"]
             cena_jidla = jedno_jidlo["meal"]["price"]
             dict = {"text_jidlo": nazev_jidla + (popis_jidla if popis_jidla is not None else ""), "text_cena": cena_jidla} #debug, jinak když chybí třeba popis nebo název tak to tady crashlo
@@ -174,6 +182,74 @@ def scrape_prostoru(page):
         logger.error(f"Unexpected error: {e}")
         raise e
 
+def ocr_image(image_bytes):
+    """Pošle obrázek do Tesseractu (přes stdin) a vrátí rozpoznaný text."""
+    result = subprocess.run(
+        ["tesseract", "stdin", "stdout", "-l", "ces", "--psm", "6"],
+        input=image_bytes,
+        capture_output=True,
+        env={**os.environ, "TESSDATA_PREFIX": TESSDATA_DIR},
+        timeout=60,
+        check=True,
+    )
+    return result.stdout.decode("utf-8")
+
+
+# cena na konci řádku: "59,-", "289,- ©", ale OCR občas ztratí pomlčku ("275,")
+CENA_NA_KONCI = re.compile(r"(\d{2,3}),\s*-?[^\w]*$")
+# čísla alergenů těsně před cenou: "1,3,7,9", "1379."
+ALERGENY_NA_KONCI = re.compile(r"\s+\d[\d,.]*\s*$")
+
+
+def parse_utopolu_text(text):
+    """Z OCR textu vyrobí seznam {"text_jidlo", "text_cena"}."""
+    menu = []
+    buffer = []
+    v_menu = False  # ignorujeme vše před první sekcí (nadpis, datum, OCR šum)
+    for radek in text.splitlines():
+        radek = radek.strip()
+        if not radek:
+            continue
+        if radek.startswith("Ve "):
+            break  # "Ve středu se můžete těšit na:" = upoutávka na zítřek, ne dnešní menu
+        if radek.endswith(":"):
+            v_menu = True
+            buffer = []
+            continue
+        if not v_menu:
+            continue
+        buffer.append(radek)
+        cena = CENA_NA_KONCI.search(radek)
+        if cena:
+            text_jidlo = " ".join(buffer)
+            text_jidlo = CENA_NA_KONCI.sub("", text_jidlo).rstrip()
+            text_jidlo = ALERGENY_NA_KONCI.sub("", text_jidlo)
+            text_jidlo = " ".join(text_jidlo.replace("|", "").split())
+            menu.append({"text_jidlo": text_jidlo, "text_cena": cena.group(1) + ",-"})
+            buffer = []
+    return menu
+
+
+def scrape_utopolu(page):
+    """U Topolů dává denní menu jako obrázek (JPG), proto OCR."""
+    try:
+        img = page.find("img", src=re.compile(r"/daily-menus/"))
+        if img is None:
+            logger.warning("U Topolů: obrázek s menu nenalezen")
+            return None
+        img_url = img["src"]
+        # v názvu souboru je datum (…-2026-11-17-denni-menu.jpg) - nechceme zobrazit včerejšek
+        if date.today().strftime("%Y-%m-%d") not in img_url:
+            logger.warning(f"U Topolů: menu není z dneška ({img_url})")
+            return None
+        image_bytes = requests.get(img_url, timeout=30).content
+        menu = parse_utopolu_text(ocr_image(image_bytes))
+        logging.debug(menu)
+        return menu
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
+
 def restaurants_all():
     vsechny_restaurants = {}
     for NAZEV_RESTAURACE, url in seznam_restauraci.items():
@@ -195,6 +271,9 @@ def restaurants_all():
         elif NAZEV_RESTAURACE == "cafe_prostoru":
             scraped_cafe_prostoru = scrape_prostoru(get_web(url))
             vsechny_restaurants["Café Prostoru"] = scraped_cafe_prostoru
+        elif NAZEV_RESTAURACE == "utopolu":
+            scraped_utopolu = scrape_utopolu(get_web(url))
+            vsechny_restaurants["U Topolů"] = scraped_utopolu
     return vsechny_restaurants
 
 if __name__ == "__main__":
