@@ -26,6 +26,7 @@ seznam_restauraci = {
     "cafe_prostoru": "https://streva.prostoru.cz/jidelnicekvlozeny.php",
     "studentska_menza": "https://agata.suz.cvut.cz/jidelnicky/index.php?clPodsystem=2&lang=cs",
     "utopolu": "http://www.utopolu.cz/menu",
+    "vera_kitchen": "https://www.verakitchen.cz/menu/",
 #"U Petnika": "",
 }
 
@@ -40,6 +41,24 @@ def get_web(url):
         return page
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+
+
+def get_web_rendered(url, hotovo_js, timeout_ms=30000):
+    """Stáhne stránku, jejíž obsah se doskládává JavaScriptem (requests by viděl jen prázdnou kostru).
+    Otevře ji v headless Chromiu (Playwright) a počká, až platí JS podmínka hotovo_js."""
+    try:
+        from playwright.sync_api import sync_playwright  # import tady, ať appka běží i bez Playwrightu
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            try:
+                page = browser.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                page.wait_for_function(hotovo_js, timeout=timeout_ms)
+                return BeautifulSoup(page.content(), features="html.parser")
+            finally:
+                browser.close()
+    except Exception as e:
+        logger.error(f"Unexpected error (rendered page {url}): {e}")
 
 
 def get_jidlovice_api():
@@ -247,6 +266,42 @@ def scrape_utopolu(page):
         logger.error(f"Unexpected error: {e}")
 
 
+# Vera Kitchen skládá menu JavaScriptem (do té doby je na stránce "Načítám menu…"),
+# hotovo = zmizel placeholder a objevila se jídla nebo hláška "Dnes máme zavřeno"
+VERA_HOTOVO_JS = """() => !document.body.innerText.includes('Načítám menu')
+    && (document.querySelector('section.vk-card .vk-row') !== null
+        || document.body.innerText.includes('Dnes máme zavřeno'))"""
+
+
+def scrape_vera(page):
+    """Vera Kitchen (Jídelna BLOX): při načtení je zobrazené dnešní menu - karty Polévky a Hlavní jídla.
+    Stálou nabídku ("každý den") vynecháváme. Cena = běžná (ne cena pro členy VERA klubu)."""
+    try:
+        dnes = date.today()
+        menu = []
+        for karta in page.select("section.vk-card"):
+            stitek = karta.select_one(".vk-dl")  # "Úterý 24. 11." - u stálé nabídky tam je "každý den"
+            if stitek is None:
+                continue
+            datum = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.", stitek.get_text())
+            if datum is None or (int(datum.group(1)), int(datum.group(2))) != (dnes.day, dnes.month):
+                logger.warning(f"Vera Kitchen: menu není z dneška ({stitek.get_text(strip=True)})")
+                return None
+            for radek in karta.select(".vk-row"):
+                text_jidlo = radek.select_one(".vk-n").get_text(" ", strip=True)
+                if "so" in radek.get("class", []):
+                    text_jidlo += " (vyprodáno)"
+                cena = radek.select_one(".vk-pb")  # "běžná 217 Kč"
+                text_cena = cena.get_text(strip=True).replace("běžná", "").strip() if cena else radek.select_one(".vk-pv").get_text(strip=True)
+                menu.append({"text_jidlo": text_jidlo, "text_cena": text_cena})
+        if not menu:
+            return None  # "Dnes máme zavřeno" (víkend, svátek)
+        logging.debug(menu)
+        return menu
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
+
 def restaurants_all():
     vsechny_restaurants = {}
     for NAZEV_RESTAURACE, url in seznam_restauraci.items():
@@ -271,6 +326,9 @@ def restaurants_all():
         elif NAZEV_RESTAURACE == "utopolu":
             scraped_utopolu = scrape_utopolu(get_web(url))
             vsechny_restaurants["U Topolů"] = scraped_utopolu
+        elif NAZEV_RESTAURACE == "vera_kitchen":
+            scraped_vera = scrape_vera(get_web_rendered(url, VERA_HOTOVO_JS))
+            vsechny_restaurants["Vera Kitchen"] = scraped_vera
     return vsechny_restaurants
 
 if __name__ == "__main__":

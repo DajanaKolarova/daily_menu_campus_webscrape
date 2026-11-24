@@ -9,6 +9,7 @@ a zobrazí je na jedné přehledné stránce.
 - **requests** – HTTP požadavky na weby restaurací
 - **BeautifulSoup (bs4)** – parsování HTML a scraping
 - **Tesseract OCR** – rozpoznání textu z obrázku s menu (U Topolů, menu je každý den JPG)
+- **Playwright (headless Chromium)** – stránky, které si menu doskládají JavaScriptem (Vera Kitchen)
 - **logging** – logování chyb a debug informací
 - **Jinja2** – templating (součást Flasku), rendrování `templates/index.html`
 
@@ -32,6 +33,13 @@ sudo apt install tesseract-ocr  # Debian/Ubuntu
 ```
 Český jazykový model je ve složce `tessdata/ces.traineddata` (aplikace na ni ukazuje sama přes `TESSDATA_PREFIX`).
 Pokud chybí, stáhni ho z https://github.com/tesseract-ocr/tessdata_fast.
+
+### Playwright (prohlížeč pro Vera Kitchen)
+Po `pip install` je potřeba jednorázově stáhnout prohlížeč (~100 MB):
+```
+playwright install chromium
+```
+Bez něj aplikace funguje dál, jen u Vera Kitchen se zobrazí hláška, že menu není.
 
 ### spuštění flask aplikace 
 ```
