@@ -41,7 +41,15 @@
                 <th>Cena</th>
             </tr>
 
+            {% set ns = namespace(stala_zacala=false) %}
             {% for pokrm in menu %}
+                {# stálá nabídka (jídla co mají každý den) jsou na konci seznamu - před prvním dáme nadpis #}
+                {% if pokrm.stala and not ns.stala_zacala %}
+                    {% set ns.stala_zacala = true %}
+                    <tr>
+                        <th colspan="2">Stálá nabídka (každý den)</th>
+                    </tr>
+                {% endif %}
                 <tr>
                     <td class="nazev"> {{ pokrm.text_jidlo }} </td>
                     <td> {{ pokrm.text_cena }} </td>

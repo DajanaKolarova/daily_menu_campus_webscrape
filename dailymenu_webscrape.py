@@ -101,16 +101,20 @@ def scrape_kulatak(page):
             logger.warning(f"Kulaťák: menu není z dneška ({datum_text})")
             return None
 
-        menu = []
+        denni_menu = []
+        stala_nabidka = []  # jídla, co mají každý den - zobrazí se až pod denním menu
         for blok in sekce.find_all("div", class_="menu-block"):
-            if "menu-block-stala" in blok.get("class", []):
-                continue  # stálá nabídka (je tam každý den) nechceme, jen denní menu
+            je_stala = "menu-block-stala" in blok.get("class", [])
             for jidlo in blok.find_all("div", class_="menu-item"):
                 nazev = jidlo.find(class_="menu-item-name").get_text(" ", strip=True)  # "1) Ledvinky"
                 cena = jidlo.find(class_="menu-item-price").get_text(strip=True)  # "178,-"
                 popis = jidlo.find(class_="menu-item-desc")  # u polévky není
                 text_jidlo = nazev + (" – " + popis.get_text(" ", strip=True) if popis else "")
-                menu.append({"text_jidlo": text_jidlo, "text_cena": cena})
+                if je_stala:
+                    stala_nabidka.append({"text_jidlo": text_jidlo, "text_cena": cena, "stala": True})
+                else:
+                    denni_menu.append({"text_jidlo": text_jidlo, "text_cena": cena})
+        menu = denni_menu + stala_nabidka
         logging.debug(menu)
         return menu
     except Exception as e:
@@ -275,27 +279,32 @@ VERA_HOTOVO_JS = """() => !document.body.innerText.includes('Načítám menu')
 
 def scrape_vera(page):
     """Vera Kitchen (Jídelna BLOX): při načtení je zobrazené dnešní menu - karty Polévky a Hlavní jídla.
-    Stálou nabídku ("každý den") vynecháváme. Cena = běžná (ne cena pro členy VERA klubu)."""
+    Stálá nabídka ("každý den") se přidá až za denní menu. Cena = běžná (ne cena pro členy VERA klubu)."""
     try:
         dnes = date.today()
-        menu = []
+        denni_menu = []
+        stala_nabidka = []
         for karta in page.select("section.vk-card"):
-            stitek = karta.select_one(".vk-dl")  # "Úterý 24. 11." - u stálé nabídky tam je "každý den"
-            if stitek is None:
-                continue
-            datum = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.", stitek.get_text())
-            if datum is None or (int(datum.group(1)), int(datum.group(2))) != (dnes.day, dnes.month):
-                logger.warning(f"Vera Kitchen: menu není z dneška ({stitek.get_text(strip=True)})")
-                return None
+            je_stala = karta.select_one(".vk-h span").get_text(strip=True).startswith("Stálá")
+            if not je_stala:
+                stitek = karta.select_one(".vk-dl")  # "Úterý 24. 11."
+                datum = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.", stitek.get_text()) if stitek else None
+                if datum is None or (int(datum.group(1)), int(datum.group(2))) != (dnes.day, dnes.month):
+                    logger.warning(f"Vera Kitchen: menu není z dneška ({stitek.get_text(strip=True) if stitek else '?'})")
+                    return None
             for radek in karta.select(".vk-row"):
                 text_jidlo = radek.select_one(".vk-n").get_text(" ", strip=True)
                 if "so" in radek.get("class", []):
                     text_jidlo += " (vyprodáno)"
                 cena = radek.select_one(".vk-pb")  # "běžná 217 Kč"
                 text_cena = cena.get_text(strip=True).replace("běžná", "").strip() if cena else radek.select_one(".vk-pv").get_text(strip=True)
-                menu.append({"text_jidlo": text_jidlo, "text_cena": text_cena})
-        if not menu:
-            return None  # "Dnes máme zavřeno" (víkend, svátek)
+                if je_stala:
+                    stala_nabidka.append({"text_jidlo": text_jidlo, "text_cena": text_cena, "stala": True})
+                else:
+                    denni_menu.append({"text_jidlo": text_jidlo, "text_cena": text_cena})
+        if not denni_menu:
+            return None  # "Dnes máme zavřeno" (víkend, svátek) - stálá nabídka sama o sobě není denní menu
+        menu = denni_menu + stala_nabidka
         logging.debug(menu)
         return menu
     except Exception as e:
