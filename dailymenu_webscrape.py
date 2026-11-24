@@ -71,30 +71,27 @@ def scrape_jidlovice(jidlovice_dict):
         logger.error(f"Unexpected error: {e}")
 
 def scrape_kulatak(page):
+    """Kulaťák: sekce #denni-menu, každé jídlo je <div class="menu-item"> (název, cena, popis)."""
     try:
+        sekce = page.find("section", id="denni-menu")
+        # v nadpisu je datum, pro které menu platí ("Aktuální polední lístek pro 25.11.2026")
+        datum_text = sekce.find("h2").get_text(" ", strip=True)
+        datum = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})", datum_text)
+        dnes = date.today()
+        if datum is None or (int(datum.group(1)), int(datum.group(2)), int(datum.group(3))) != (dnes.day, dnes.month, dnes.year):
+            logger.warning(f"Kulaťák: menu není z dneška ({datum_text})")
+            return None
+
         menu = []
-        container = page.find(attrs={"class": "elementor-element-425aa18"})
-        paragraphs = container.find_all('p', style=re.compile(r'text-align\s*:\s*center', re.IGNORECASE)) #regex protože každý den mají to html trochu jiný
-        pomocna_prom = ""
-        for jeden_paragraf in paragraphs:
-            text_paragrafu = jeden_paragraf.get_text().strip().replace("\n", "") # .strip zbaví zbytečných mezer .replace nový řádek za prázdný string
-            if text_paragrafu != "":
-                if (text_paragrafu[0].isdigit() and text_paragrafu[1] == ")") or "Specialita týdne" in text_paragrafu: #jejich formátování denní nabídky číslo) nebo týdenní specialita
-                    pomocna_prom += text_paragrafu
-                    continue
-                if pomocna_prom != "":
-                    if ",-" in text_paragrafu:
-                        if len(text_paragrafu) > 6:
-                            dict = {"text_jidlo": pomocna_prom + " " + text_paragrafu[0:-5], "text_cena": text_paragrafu[-5:]} #oddělení ceny od popisu pomocí indexování a slicingu protože regex je ouvej
-                            pass
-                        else:
-                            dict = {"text_jidlo": pomocna_prom, "text_cena": text_paragrafu}
-                        pomocna_prom = ""
-                        menu.append(dict)
-                    else:
-                        pomocna_prom += " " + text_paragrafu
-#použít regexp protože najednou dali cenu do stejnýho paragrafu jako zbytek jídla
-#specialita týdne která pomocna proměnná najít specialitu týdne a pak to co je za tím
+        for blok in sekce.find_all("div", class_="menu-block"):
+            if "menu-block-stala" in blok.get("class", []):
+                continue  # stálá nabídka (je tam každý den) nechceme, jen denní menu
+            for jidlo in blok.find_all("div", class_="menu-item"):
+                nazev = jidlo.find(class_="menu-item-name").get_text(" ", strip=True)  # "1) Ledvinky"
+                cena = jidlo.find(class_="menu-item-price").get_text(strip=True)  # "178,-"
+                popis = jidlo.find(class_="menu-item-desc")  # u polévky není
+                text_jidlo = nazev + (" – " + popis.get_text(" ", strip=True) if popis else "")
+                menu.append({"text_jidlo": text_jidlo, "text_cena": cena})
         logging.debug(menu)
         return menu
     except Exception as e:
