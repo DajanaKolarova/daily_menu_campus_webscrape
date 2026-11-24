@@ -115,18 +115,11 @@
             margin-right: 8px;
         }
 
-        /* šipky pro přesun restaurace */
+        /* tlačítko 📍 vedle nadpisu restaurace */
         .presun {
             font-size: 0.6em;
             margin-left: 8px;
             white-space: nowrap;
-        }
-        .sipka {
-            border: 1px solid #aaa;
-            border-radius: 4px;
-            background: #fff;
-            cursor: pointer;
-            padding: 0 6px;
         }
 
     </style>
@@ -147,7 +140,7 @@
     <button type="button" class="chip-akce" id="skryt-vse">Skrýt vše</button>
     <button type="button" class="chip-akce" id="puvodni-poradi">Původní pořadí</button>
     <a class="chip-akce" href="#mapa">Mapa ↓</a>
-    <span class="tip">Kliknutím restauraci skryješ/zobrazíš, přetažením tlačítka nebo úchytu ⠿ u nadpisu změníš pořadí (případně šipky ↑ ↓).</span>
+    <span class="tip">Kliknutím restauraci skryješ/zobrazíš, přetažením tlačítka nebo úchytu ⠿ u nadpisu změníš pořadí.</span>
 </div>
 
 <div id="seznam">
@@ -155,8 +148,6 @@
 <section class="restaurace" data-nazev="{{ nazev_restaurace }}">
     <h2><span class="uchop" draggable="true" title="Přetáhni pro změnu pořadí" aria-hidden="true">⠿</span>{{ nazev_restaurace }}
         <span class="presun">
-            <button type="button" class="sipka" data-smer="-1" title="Posunout nahoru" aria-label="Posunout {{ nazev_restaurace }} nahoru">↑</button>
-            <button type="button" class="sipka" data-smer="1" title="Posunout dolů" aria-label="Posunout {{ nazev_restaurace }} dolů">↓</button>
             {% if nazev_restaurace in lokace %}
                 <button type="button" class="pin" data-nazev="{{ nazev_restaurace }}" title="Ukázat na mapě" aria-label="Ukázat {{ nazev_restaurace }} na mapě">📍</button>
             {% endif %}
@@ -254,14 +245,6 @@
     document.getElementById("zobrazit-vse").addEventListener("click", () => { skryte.clear(); ulozVse(); });
     document.getElementById("skryt-vse").addEventListener("click", () => { poradi.forEach(n => skryte.add(n)); ulozVse(); });
     document.getElementById("puvodni-poradi").addEventListener("click", () => { poradi = [...vychoziPoradi]; ulozVse(); });
-
-    // šipky u nadpisu: posun o jednu viditelnou restauraci nahoru/dolů (skryté se přeskakují)
-    sekce.forEach((sek, nazev) => sek.querySelectorAll(".sipka").forEach(tl => tl.addEventListener("click", () => {
-        const smer = Number(tl.dataset.smer);
-        let j = poradi.indexOf(nazev) + smer;
-        while (j >= 0 && j < poradi.length && skryte.has(poradi[j])) j += smer;
-        if (j >= 0 && j < poradi.length) presunNa(nazev, j);
-    })));
 
     // přetahování myší: táhnout jde tlačítko v horní liště NEBO úchyt ⠿ u nadpisu,
     // pustit se dá na tlačítko nebo na nadpis jiné restaurace (zaujme její místo)
