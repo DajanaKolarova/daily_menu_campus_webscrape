@@ -42,6 +42,15 @@ playwright install chromium
 ```
 Bez něj aplikace funguje dál, jen u Vera Kitchen se zobrazí hláška, že menu není.
 
+### Docker (volitelně)
+V image je všechno hotové (Python, závislosti, Tesseract s češtinou, Chromium pro Playwright), takže na počítači stačí jen Docker:
+```
+docker build -t dame-obed .
+docker run --rm -p 9999:9999 dame-obed
+```
+Pak otevři http://localhost:9999. Načtení stránky trvá desítky sekund (scrapery, OCR, Chromium).
+V kontejneru běží `gunicorn` a časová zóna je nastavená na `Europe/Prague`.
+
 ### spuštění flask aplikace 
 ```
 python flask_app.py

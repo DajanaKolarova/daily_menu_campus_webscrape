@@ -1,0 +1,11 @@
+# co se NEmá kopírovat do image (COPY . . v Dockerfile)
+prostredi/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.idea/
+Dockerfile
+.dockerignore
