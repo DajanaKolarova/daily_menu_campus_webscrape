@@ -76,7 +76,8 @@ def get_jidlovice_api():
 
 def scrape_jidlovice(jidlovice_dict):
     try:
-        menu = []
+        denni_menu = []
+        stala_nabidka = []  # jídla, co mají pořád (API je značí meal["permanent"]) - zobrazí se až pod denním menu
         for jedno_jidlo in jidlovice_dict["menu_items"]:
             nazev_jidla = jedno_jidlo["meal"]["name"] #nested dictionary - value může být cokoli - i další dictionary
             # výjimka: jídla ve sklenici/skle na domů ("0,33l sklenice", "0,66l sklo(2 porce)") nechceme
@@ -85,7 +86,12 @@ def scrape_jidlovice(jidlovice_dict):
             popis_jidla = jedno_jidlo["meal"]["description"]
             cena_jidla = jedno_jidlo["meal"]["price"]
             dict = {"text_jidlo": nazev_jidla + (popis_jidla if popis_jidla is not None else ""), "text_cena": cena_jidla} #debug, jinak když chybí třeba popis nebo název tak to tady crashlo
-            menu.append(dict)
+            if jedno_jidlo["meal"].get("permanent"):
+                dict["stala"] = True
+                stala_nabidka.append(dict)
+            else:
+                denni_menu.append(dict)
+        menu = denni_menu + stala_nabidka
         logging.debug(menu)
         return menu
     except Exception as e:
