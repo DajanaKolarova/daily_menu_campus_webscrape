@@ -10,6 +10,7 @@ a zobrazí je na jedné přehledné stránce.
 - **BeautifulSoup (bs4)** – parsování HTML a scraping
 - **Tesseract OCR** – rozpoznání textu z obrázku s menu (U Topolů, menu je každý den JPG)
 - **Playwright (headless Chromium)** – stránky, které si menu doskládají JavaScriptem (Vera Kitchen)
+- **Leaflet + OpenStreetMap** – mapa restaurací dole na stránce (souřadnice jsou v `lokace.py`, mapa se načítá z internetu)
 - **logging** – logování chyb a debug informací
 - **Jinja2** – templating (součást Flasku), rendrování `templates/index.html`
 

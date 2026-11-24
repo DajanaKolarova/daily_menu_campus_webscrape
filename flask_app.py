@@ -1,6 +1,7 @@
 from datetime import datetime
 from flask import Flask, render_template
 from dailymenu_webscrape import restaurants_all
+from lokace import LOKACE
 app = Flask(__name__)
 
 # --- hlášky, když menu chybí (tady je můžeš přepisovat) ---
@@ -27,7 +28,7 @@ def failure_message():
 @app.route('/')
 def index():
     restaurants_result = restaurants_all()
-    return render_template("index.html", restaurants=restaurants_result, failure_message=failure_message)
+    return render_template("index.html", restaurants=restaurants_result, failure_message=failure_message, lokace=LOKACE)
 
 if __name__ == "__main__":
     app.run(debug=True, port=9999)
