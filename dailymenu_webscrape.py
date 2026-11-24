@@ -8,6 +8,7 @@ python flask_app.py
 '''
 
 import os
+import json
 import subprocess
 import requests
 import logging
@@ -27,7 +28,8 @@ seznam_restauraci = {
     "studentska_menza": "https://agata.suz.cvut.cz/jidelnicky/index.php?clPodsystem=2&lang=cs",
     "utopolu": "http://www.utopolu.cz/menu",
     "vera_kitchen": "https://www.verakitchen.cz/menu/",
-#"U Petnika": "",
+    "u_petnika": "https://upetnika.cz/",
+    "na_kotlarce": "https://nakotlarce.cz/menu/section:denni-menu/denni-menu",
 }
 
 # OCR: Tesseract binary + Czech model stored in the project (./tessdata/ces.traineddata)
@@ -270,6 +272,50 @@ def scrape_utopolu(page):
         logger.error(f"Unexpected error: {e}")
 
 
+def scrape_upetnika(page):
+    """U Pětníka: denní menu je v div.ural-type-daily, nadpis obsahuje datum ("Denní nabídka 24.11.2026"),
+    jídla jsou <li class="ural-item"> (název + cena)."""
+    try:
+        kontejner = page.select_one("div.ural-menu-container.ural-type-daily")
+        nadpis = kontejner.select_one("h3.ural-main-title").get_text(" ", strip=True)
+        datum = re.search(r"(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})", nadpis)
+        dnes = date.today()
+        if datum is None or tuple(int(c) for c in datum.groups()) != (dnes.day, dnes.month, dnes.year):
+            logger.warning(f"U Pětníka: menu není z dneška ({nadpis})")
+            return None
+        menu = []
+        for polozka in kontejner.select("li.ural-item"):
+            text_jidlo = polozka.select_one(".ural-name").get_text(" ", strip=True)
+            cena = polozka.select_one(".ural-price").get_text(strip=True)
+            menu.append({"text_jidlo": text_jidlo, "text_cena": cena + " Kč"})
+        logging.debug(menu)
+        return menu
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
+
+def scrape_nakotlarce(page):
+    """Na Kotlářce (ChoiceQR): menu je v JSON-LD (schema.org Restaurant -> hasMenu) přímo v HTML.
+    Stránka u menu neuvádí datum, takže se nedá ověřit, že je z dneška."""
+    try:
+        menu = []
+        for skript in page.find_all("script", type="application/ld+json"):
+            data = json.loads(skript.string)
+            if not (isinstance(data, dict) and data.get("@type") == "Restaurant" and "hasMenu" in data):
+                continue
+            for sekce in data["hasMenu"]["hasMenuSection"]:
+                for polozka in sekce["hasMenuItem"]:
+                    text_jidlo = " ".join(polozka["name"].split())  # "0,3l\tPolévka" -> "0,3l Polévka"
+                    text_jidlo = re.sub(r"\s*\([\d,\s]+\)$", "", text_jidlo)  # čísla alergenů na konci "(1,3,7)"
+                    menu.append({"text_jidlo": text_jidlo, "text_cena": polozka["offers"]["price"] + " Kč"})
+        if not menu:
+            return None
+        logging.debug(menu)
+        return menu
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+
+
 # Vera Kitchen skládá menu JavaScriptem (do té doby je na stránce "Načítám menu…"),
 # hotovo = zmizel placeholder a objevila se jídla nebo hláška "Dnes máme zavřeno"
 VERA_HOTOVO_JS = """() => !document.body.innerText.includes('Načítám menu')
@@ -338,6 +384,12 @@ def restaurants_all():
         elif NAZEV_RESTAURACE == "vera_kitchen":
             scraped_vera = scrape_vera(get_web_rendered(url, VERA_HOTOVO_JS))
             vsechny_restaurants["Vera Kitchen"] = scraped_vera
+        elif NAZEV_RESTAURACE == "u_petnika":
+            scraped_petnik = scrape_upetnika(get_web(url))
+            vsechny_restaurants["U Pětníka"] = scraped_petnik
+        elif NAZEV_RESTAURACE == "na_kotlarce":
+            scraped_kotlarka = scrape_nakotlarce(get_web(url))
+            vsechny_restaurants["Na Kotlářce"] = scraped_kotlarka
     return vsechny_restaurants
 
 if __name__ == "__main__":
