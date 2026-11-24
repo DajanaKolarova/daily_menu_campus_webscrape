@@ -3,7 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <title>Dáme oběd</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <meta name="color-scheme" content="light">
     <style>
+        /* stránka je navržená světlá - bez tohohle ji tmavý režim prohlížeče udělá nečitelnou (tmavý text na tmavém) */
+        html { color-scheme: light; }
+        body { background: #fff; color: #111; }
         th { text-align: left; }
         * {
             font-family: sans-serif;
@@ -20,6 +26,102 @@
             padding: 6px;
         }
 
+        /* přepínač restaurací */
+        #vyber {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            padding: 8px 0;
+            margin-bottom: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+        }
+        #chips {
+            display: contents;
+        }
+        .chip {
+            border: 1px solid #555;
+            border-radius: 999px;
+            padding: 4px 12px;
+            background: #fff;
+            color: #555;
+            cursor: grab;
+            text-decoration: line-through;
+        }
+        .chip[aria-pressed="true"] {
+            background: #222;
+            color: #fff;
+            text-decoration: none;
+        }
+        .chip.tazeny {
+            opacity: 0.35;
+        }
+        .chip.cil {
+            outline: 2px dashed #06c;
+            outline-offset: 2px;
+        }
+        .grip {
+            opacity: 0.6;
+            margin-right: 4px;
+        }
+        .uchop {
+            cursor: grab;
+            color: #888;
+            margin-right: 6px;
+            user-select: none;
+        }
+        .restaurace.tazeny {
+            opacity: 0.4;
+        }
+        .restaurace > h2.cil {
+            outline: 2px dashed #06c;
+            outline-offset: 2px;
+        }
+        .chip-akce {
+            border: none;
+            background: none;
+            color: #06c;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .tip {
+            width: 100%;
+            font-size: 0.8em;
+            color: #777;
+        }
+
+        /* mapa */
+        #mapa {
+            scroll-margin-top: 140px;  /* ať ji po skoku nezakryje horní lišta */
+            margin-top: 24px;
+        }
+        #mapa-box {
+            height: 460px;
+            border: 1px solid #aaa;
+        }
+        .pin {
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+        .popup-akce {
+            display: inline-block;
+            margin-top: 6px;
+            margin-right: 8px;
+        }
+
+        /* tlačítko 📍 vedle nadpisu restaurace */
+        .presun {
+            font-size: 0.6em;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+
     </style>
 </head>
 <body>
@@ -28,17 +130,33 @@
   Dáme oběd na kampusu
 </h1>
 
+<div id="vyber">
+    <div id="chips">
+        {% for nazev_restaurace in restaurants %}
+            <button type="button" class="chip" draggable="true" data-nazev="{{ nazev_restaurace }}" aria-pressed="true"><span class="grip" aria-hidden="true">⠿</span>{{ nazev_restaurace }}</button>
+        {% endfor %}
+    </div>
+    <button type="button" class="chip-akce" id="zobrazit-vse">Zobrazit vše</button>
+    <button type="button" class="chip-akce" id="skryt-vse">Skrýt vše</button>
+    <button type="button" class="chip-akce" id="puvodni-poradi">Původní pořadí</button>
+    <a class="chip-akce" href="#mapa">Mapa ↓</a>
+    <span class="tip">Kliknutím restauraci skryješ/zobrazíš, přetažením tlačítka nebo úchytu ⠿ u nadpisu změníš pořadí.</span>
+</div>
+
+<div id="seznam">
 {% for nazev_restaurace, menu in restaurants.items() %}
-    <h2>{{ nazev_restaurace }}</h2>
+<section class="restaurace" data-nazev="{{ nazev_restaurace }}">
+    <h2><span class="uchop" draggable="true" title="Přetáhni pro změnu pořadí" aria-hidden="true">⠿</span>{{ nazev_restaurace }}
+        <span class="presun">
+            {% if nazev_restaurace in lokace %}
+                <button type="button" class="pin" data-nazev="{{ nazev_restaurace }}" title="Ukázat na mapě" aria-label="Ukázat {{ nazev_restaurace }} na mapě">📍</button>
+            {% endif %}
+        </span>
+    </h2>
 
     {% if menu is none %}
-        Dneska asi není denní meníčko :(
-<!--
-Čas < 9:00	Moc brzo	„Kuchař ještě ani nedopil kafe. Menu bude, až se proberem.“
-Čas > 15:00	Moc pozdě	„Smůla, už je po hostině. Zkus to zítra dřív, než tě předběhnou hladovější.“
-HTML Error	Změna webu	„Restaurace změnila design webu a můj kód z toho má depresi. Pracuju na tom!“
--->
-
+        {# menu se nepodařilo získat - hláška se vybírá v flask_app.py (failure_message) #}
+        {{ failure_message() }}
     {% else %}
         <table>
             <tr>
@@ -46,7 +164,15 @@ HTML Error	Změna webu	„Restaurace změnila design webu a můj kód z toho má
                 <th>Cena</th>
             </tr>
 
+            {% set ns = namespace(stala_zacala=false) %}
             {% for pokrm in menu %}
+                {# stálá nabídka (jídla co mají každý den) jsou na konci seznamu - před prvním dáme nadpis #}
+                {% if pokrm.stala and not ns.stala_zacala %}
+                    {% set ns.stala_zacala = true %}
+                    <tr>
+                        <th colspan="2">Stálá nabídka (každý den)</th>
+                    </tr>
+                {% endif %}
                 <tr>
                     <td class="nazev"> {{ pokrm.text_jidlo }} </td>
                     <td> {{ pokrm.text_cena }} </td>
@@ -54,9 +180,200 @@ HTML Error	Změna webu	„Restaurace změnila design webu a můj kód z toho má
             {% endfor %}
         </table>
     {% endif %}
+</section>
 {% endfor %}
+</div>
+
+<section id="mapa">
+    <h2>Mapa restaurací</h2>
+    <div id="mapa-box">Načítám mapu…</div>
+    <p class="tip">Na mapě jsou jen restaurace, které nemáš skryté. 📍 u nadpisu restaurace ji na mapě zvýrazní.</p>
+</section>
 
 <h3></h3>
+
+<script>
+    // Co je skryté a v jakém pořadí restaurace jsou - pamatujeme si v prohlížeči (localStorage),
+    // ať to po obnovení stránky zůstane.
+    const KLIC_SKRYTE = "dameObed.skryte";
+    const KLIC_PORADI = "dameObed.poradi";
+    function nacti(klic) {
+        try { return JSON.parse(localStorage.getItem(klic)) || []; } catch (e) { return []; }
+    }
+    function uloz(klic, hodnota) {
+        try { localStorage.setItem(klic, JSON.stringify(hodnota)); } catch (e) { /* bez ukládání to jede dál */ }
+    }
+
+    const seznam = document.getElementById("seznam");
+    const chipsBox = document.getElementById("chips");
+    const sekce = new Map([...document.querySelectorAll("section.restaurace")].map(s => [s.dataset.nazev, s]));
+    const chipy = new Map([...document.querySelectorAll(".chip[data-nazev]")].map(c => [c.dataset.nazev, c]));
+    const vychoziPoradi = [...sekce.keys()];  // pořadí, jak ho posílá server
+
+    // uložené pořadí + nové restaurace, které v něm ještě nejsou, na konec
+    const ulozene = nacti(KLIC_PORADI).filter(n => sekce.has(n));
+    let poradi = ulozene.concat(vychoziPoradi.filter(n => !ulozene.includes(n)));
+    const skryte = new Set(nacti(KLIC_SKRYTE));
+
+    function vykresli() {
+        poradi.forEach(nazev => {          // appendChild přesune existující prvek na konec => seřadí
+            seznam.appendChild(sekce.get(nazev));
+            chipsBox.appendChild(chipy.get(nazev));
+        });
+        poradi.forEach(nazev => {
+            chipy.get(nazev).setAttribute("aria-pressed", String(!skryte.has(nazev)));
+            sekce.get(nazev).hidden = skryte.has(nazev);
+        });
+        document.dispatchEvent(new Event("restaurace-zmena"));  // mapa si podle toho přepočítá, které body ukázat
+    }
+    function ulozVse() {
+        uloz(KLIC_SKRYTE, [...skryte]);
+        uloz(KLIC_PORADI, poradi);
+        vykresli();
+    }
+    function presunNa(nazev, novyIndex) {
+        poradi.splice(poradi.indexOf(nazev), 1);
+        poradi.splice(novyIndex, 0, nazev);
+        ulozVse();
+    }
+
+    // zobrazit/skrýt
+    chipy.forEach((chip, nazev) => chip.addEventListener("click", () => {
+        skryte.has(nazev) ? skryte.delete(nazev) : skryte.add(nazev);
+        ulozVse();
+    }));
+    document.getElementById("zobrazit-vse").addEventListener("click", () => { skryte.clear(); ulozVse(); });
+    document.getElementById("skryt-vse").addEventListener("click", () => { poradi.forEach(n => skryte.add(n)); ulozVse(); });
+    document.getElementById("puvodni-poradi").addEventListener("click", () => { poradi = [...vychoziPoradi]; ulozVse(); });
+
+    // přetahování myší: táhnout jde tlačítko v horní liště NEBO úchyt ⠿ u nadpisu,
+    // pustit se dá na tlačítko nebo na nadpis jiné restaurace (zaujme její místo)
+    let tazeny = null;
+    function zacniTahat(e, nazev, prvek) {
+        tazeny = nazev;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", nazev);
+        if (prvek) prvek.classList.add("tazeny");
+    }
+    function skonciTahani() {
+        tazeny = null;
+        document.querySelectorAll(".tazeny, .cil").forEach(el => el.classList.remove("tazeny", "cil"));
+    }
+    function jeCil(el, nazev) {  // el = tlačítko nebo nadpis, který přijímá pustění
+        el.addEventListener("dragover", e => {
+            if (tazeny && tazeny !== nazev) { e.preventDefault(); el.classList.add("cil"); }
+        });
+        el.addEventListener("dragleave", () => el.classList.remove("cil"));
+        el.addEventListener("drop", e => {
+            e.preventDefault();
+            el.classList.remove("cil");
+            if (tazeny && tazeny !== nazev) presunNa(tazeny, poradi.indexOf(nazev));
+        });
+    }
+    chipy.forEach((chip, nazev) => {
+        chip.addEventListener("dragstart", e => zacniTahat(e, nazev, chip));
+        chip.addEventListener("dragend", skonciTahani);
+        jeCil(chip, nazev);
+    });
+    sekce.forEach((sek, nazev) => {
+        const nadpis = sek.querySelector("h2");
+        const uchyt = sek.querySelector(".uchop");
+        uchyt.addEventListener("dragstart", e => {
+            zacniTahat(e, nazev, sek);
+            e.dataTransfer.setDragImage(nadpis, 0, 0);  // při tažení je vidět celý nadpis, ne jen úchyt
+        });
+        uchyt.addEventListener("dragend", skonciTahani);
+        jeCil(nadpis, nazev);
+    });
+
+    vykresli();
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+    // Mapa (Leaflet + OpenStreetMap). Souřadnice jsou v lokace.py.
+    (function () {
+        const lokace = {{ lokace | tojson }};
+        const box = document.getElementById("mapa-box");
+        if (typeof L === "undefined") {
+            box.textContent = "Mapu se nepodařilo načíst (chybí připojení k internetu?).";
+            return;
+        }
+        box.textContent = "";
+        const mapa = L.map(box).setView([50.103, 14.392], 15);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; přispěvatelé <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(mapa);
+
+        const STYL = {radius: 9, color: "#fff", weight: 2, fillColor: "#222", fillOpacity: 0.9};
+        const STYL_ZVYRAZNENY = {radius: 15, color: "#fff", weight: 3, fillColor: "#d32f2f", fillOpacity: 1};
+        const body = new Map();  // název restaurace -> značka na mapě
+
+        function obsahPopupu(nazev, m) {
+            const div = document.createElement("div");
+            const nadpis = document.createElement("strong");
+            nadpis.textContent = nazev;
+            div.append(nadpis, document.createElement("br"), m.adresa, document.createElement("br"));
+            const odkaz = (text, url) => {
+                const a = document.createElement("a");
+                a.textContent = text; a.href = url; a.target = "_blank"; a.rel = "noopener";
+                a.className = "popup-akce";
+                return a;
+            };
+            div.append(
+                odkaz("Google Maps", `https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lon}`),
+                odkaz("Mapy.cz", `https://mapy.cz/zakladni?x=${m.lon}&y=${m.lat}&z=17&source=coor&id=${m.lon},${m.lat}`)
+            );
+            const zpet = document.createElement("a");   // skok zpátky na menu té restaurace
+            zpet.textContent = "↑ Menu"; zpet.href = "#"; zpet.className = "popup-akce";
+            zpet.addEventListener("click", e => {
+                e.preventDefault();
+                const sek = document.querySelector(`section.restaurace[data-nazev="${CSS.escape(nazev)}"]`);
+                if (sek && !sek.hidden) sek.scrollIntoView({behavior: "smooth", block: "start"});
+            });
+            div.append(zpet);
+            return div;
+        }
+
+        function zvyrazni(nazev) {
+            body.forEach((bod, n) => bod.setStyle(n === nazev ? STYL_ZVYRAZNENY : STYL));
+            const bod = body.get(nazev);
+            if (bod) { bod.bringToFront(); }
+        }
+
+        Object.entries(lokace).forEach(([nazev, m]) => {
+            const bod = L.circleMarker([m.lat, m.lon], STYL).bindTooltip(nazev).bindPopup(() => obsahPopupu(nazev, m));
+            bod.on("click", () => zvyrazni(nazev));  // popup se otevře sám
+            body.set(nazev, bod);
+        });
+        mapa.on("popupclose", () => body.forEach(bod => bod.setStyle(STYL)));
+
+        // na mapě jsou jen restaurace, které nejsou skryté; mapa se přiblíží na ně
+        function synchronizuj() {
+            const viditelne = new Set([...document.querySelectorAll("section.restaurace:not([hidden])")].map(s => s.dataset.nazev));
+            const souradnice = [];
+            body.forEach((bod, nazev) => {
+                if (viditelne.has(nazev)) { bod.addTo(mapa); souradnice.push(bod.getLatLng()); }
+                else { bod.remove(); }
+            });
+            if (souradnice.length) mapa.fitBounds(L.latLngBounds(souradnice), {padding: [50, 50], maxZoom: 16});
+        }
+        document.addEventListener("restaurace-zmena", synchronizuj);
+        synchronizuj();
+
+        // 📍 u nadpisu: skočí na mapu a zvýrazní bod té restaurace
+        document.querySelectorAll(".pin").forEach(tl => tl.addEventListener("click", () => {
+            const nazev = tl.dataset.nazev, bod = body.get(nazev);
+            if (!bod) return;
+            document.getElementById("mapa").scrollIntoView({behavior: "smooth", block: "start"});
+            mapa.setView(bod.getLatLng(), Math.max(mapa.getZoom(), 16));
+            bod.openPopup();   // nejdřív popup (zavře předchozí a tím smaže staré zvýraznění)...
+            zvyrazni(nazev);   // ...pak teprve zvýraznit tuhle restauraci
+        }));
+    })();
+</script>
 
 </body>
 </html>
