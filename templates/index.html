@@ -20,6 +20,87 @@
             padding: 6px;
         }
 
+        /* přepínač restaurací */
+        #vyber {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            padding: 8px 0;
+            margin-bottom: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            border-bottom: 1px solid #ddd;
+        }
+        #chips {
+            display: contents;
+        }
+        .chip {
+            border: 1px solid #555;
+            border-radius: 999px;
+            padding: 4px 12px;
+            background: #fff;
+            color: #555;
+            cursor: grab;
+            text-decoration: line-through;
+        }
+        .chip[aria-pressed="true"] {
+            background: #222;
+            color: #fff;
+            text-decoration: none;
+        }
+        .chip.tazeny {
+            opacity: 0.35;
+        }
+        .chip.cil {
+            outline: 2px dashed #06c;
+            outline-offset: 2px;
+        }
+        .grip {
+            opacity: 0.6;
+            margin-right: 4px;
+        }
+        .uchop {
+            cursor: grab;
+            color: #888;
+            margin-right: 6px;
+            user-select: none;
+        }
+        .restaurace.tazeny {
+            opacity: 0.4;
+        }
+        .restaurace > h2.cil {
+            outline: 2px dashed #06c;
+            outline-offset: 2px;
+        }
+        .chip-akce {
+            border: none;
+            background: none;
+            color: #06c;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .tip {
+            width: 100%;
+            font-size: 0.8em;
+            color: #777;
+        }
+
+        /* šipky pro přesun restaurace */
+        .presun {
+            font-size: 0.6em;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+        .sipka {
+            border: 1px solid #aaa;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            padding: 0 6px;
+        }
+
     </style>
 </head>
 <body>
@@ -28,8 +109,27 @@
   Dáme oběd na kampusu
 </h1>
 
+<div id="vyber">
+    <div id="chips">
+        {% for nazev_restaurace in restaurants %}
+            <button type="button" class="chip" draggable="true" data-nazev="{{ nazev_restaurace }}" aria-pressed="true"><span class="grip" aria-hidden="true">⠿</span>{{ nazev_restaurace }}</button>
+        {% endfor %}
+    </div>
+    <button type="button" class="chip-akce" id="zobrazit-vse">Zobrazit vše</button>
+    <button type="button" class="chip-akce" id="skryt-vse">Skrýt vše</button>
+    <button type="button" class="chip-akce" id="puvodni-poradi">Původní pořadí</button>
+    <span class="tip">Kliknutím restauraci skryješ/zobrazíš, přetažením tlačítka nebo úchytu ⠿ u nadpisu změníš pořadí (případně šipky ↑ ↓).</span>
+</div>
+
+<div id="seznam">
 {% for nazev_restaurace, menu in restaurants.items() %}
-    <h2>{{ nazev_restaurace }}</h2>
+<section class="restaurace" data-nazev="{{ nazev_restaurace }}">
+    <h2><span class="uchop" draggable="true" title="Přetáhni pro změnu pořadí" aria-hidden="true">⠿</span>{{ nazev_restaurace }}
+        <span class="presun">
+            <button type="button" class="sipka" data-smer="-1" title="Posunout nahoru" aria-label="Posunout {{ nazev_restaurace }} nahoru">↑</button>
+            <button type="button" class="sipka" data-smer="1" title="Posunout dolů" aria-label="Posunout {{ nazev_restaurace }} dolů">↓</button>
+        </span>
+    </h2>
 
     {% if menu is none %}
         {# menu se nepodařilo získat - hláška se vybírá v flask_app.py (failure_message) #}
@@ -57,9 +157,115 @@
             {% endfor %}
         </table>
     {% endif %}
+</section>
 {% endfor %}
+</div>
 
 <h3></h3>
+
+<script>
+    // Co je skryté a v jakém pořadí restaurace jsou - pamatujeme si v prohlížeči (localStorage),
+    // ať to po obnovení stránky zůstane.
+    const KLIC_SKRYTE = "dameObed.skryte";
+    const KLIC_PORADI = "dameObed.poradi";
+    function nacti(klic) {
+        try { return JSON.parse(localStorage.getItem(klic)) || []; } catch (e) { return []; }
+    }
+    function uloz(klic, hodnota) {
+        try { localStorage.setItem(klic, JSON.stringify(hodnota)); } catch (e) { /* bez ukládání to jede dál */ }
+    }
+
+    const seznam = document.getElementById("seznam");
+    const chipsBox = document.getElementById("chips");
+    const sekce = new Map([...document.querySelectorAll("section.restaurace")].map(s => [s.dataset.nazev, s]));
+    const chipy = new Map([...document.querySelectorAll(".chip[data-nazev]")].map(c => [c.dataset.nazev, c]));
+    const vychoziPoradi = [...sekce.keys()];  // pořadí, jak ho posílá server
+
+    // uložené pořadí + nové restaurace, které v něm ještě nejsou, na konec
+    const ulozene = nacti(KLIC_PORADI).filter(n => sekce.has(n));
+    let poradi = ulozene.concat(vychoziPoradi.filter(n => !ulozene.includes(n)));
+    const skryte = new Set(nacti(KLIC_SKRYTE));
+
+    function vykresli() {
+        poradi.forEach(nazev => {          // appendChild přesune existující prvek na konec => seřadí
+            seznam.appendChild(sekce.get(nazev));
+            chipsBox.appendChild(chipy.get(nazev));
+        });
+        poradi.forEach(nazev => {
+            chipy.get(nazev).setAttribute("aria-pressed", String(!skryte.has(nazev)));
+            sekce.get(nazev).hidden = skryte.has(nazev);
+        });
+    }
+    function ulozVse() {
+        uloz(KLIC_SKRYTE, [...skryte]);
+        uloz(KLIC_PORADI, poradi);
+        vykresli();
+    }
+    function presunNa(nazev, novyIndex) {
+        poradi.splice(poradi.indexOf(nazev), 1);
+        poradi.splice(novyIndex, 0, nazev);
+        ulozVse();
+    }
+
+    // zobrazit/skrýt
+    chipy.forEach((chip, nazev) => chip.addEventListener("click", () => {
+        skryte.has(nazev) ? skryte.delete(nazev) : skryte.add(nazev);
+        ulozVse();
+    }));
+    document.getElementById("zobrazit-vse").addEventListener("click", () => { skryte.clear(); ulozVse(); });
+    document.getElementById("skryt-vse").addEventListener("click", () => { poradi.forEach(n => skryte.add(n)); ulozVse(); });
+    document.getElementById("puvodni-poradi").addEventListener("click", () => { poradi = [...vychoziPoradi]; ulozVse(); });
+
+    // šipky u nadpisu: posun o jednu viditelnou restauraci nahoru/dolů (skryté se přeskakují)
+    sekce.forEach((sek, nazev) => sek.querySelectorAll(".sipka").forEach(tl => tl.addEventListener("click", () => {
+        const smer = Number(tl.dataset.smer);
+        let j = poradi.indexOf(nazev) + smer;
+        while (j >= 0 && j < poradi.length && skryte.has(poradi[j])) j += smer;
+        if (j >= 0 && j < poradi.length) presunNa(nazev, j);
+    })));
+
+    // přetahování myší: táhnout jde tlačítko v horní liště NEBO úchyt ⠿ u nadpisu,
+    // pustit se dá na tlačítko nebo na nadpis jiné restaurace (zaujme její místo)
+    let tazeny = null;
+    function zacniTahat(e, nazev, prvek) {
+        tazeny = nazev;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", nazev);
+        if (prvek) prvek.classList.add("tazeny");
+    }
+    function skonciTahani() {
+        tazeny = null;
+        document.querySelectorAll(".tazeny, .cil").forEach(el => el.classList.remove("tazeny", "cil"));
+    }
+    function jeCil(el, nazev) {  // el = tlačítko nebo nadpis, který přijímá pustění
+        el.addEventListener("dragover", e => {
+            if (tazeny && tazeny !== nazev) { e.preventDefault(); el.classList.add("cil"); }
+        });
+        el.addEventListener("dragleave", () => el.classList.remove("cil"));
+        el.addEventListener("drop", e => {
+            e.preventDefault();
+            el.classList.remove("cil");
+            if (tazeny && tazeny !== nazev) presunNa(tazeny, poradi.indexOf(nazev));
+        });
+    }
+    chipy.forEach((chip, nazev) => {
+        chip.addEventListener("dragstart", e => zacniTahat(e, nazev, chip));
+        chip.addEventListener("dragend", skonciTahani);
+        jeCil(chip, nazev);
+    });
+    sekce.forEach((sek, nazev) => {
+        const nadpis = sek.querySelector("h2");
+        const uchyt = sek.querySelector(".uchop");
+        uchyt.addEventListener("dragstart", e => {
+            zacniTahat(e, nazev, sek);
+            e.dataTransfer.setDragImage(nadpis, 0, 0);  // při tažení je vidět celý nadpis, ne jen úchyt
+        });
+        uchyt.addEventListener("dragend", skonciTahani);
+        jeCil(nadpis, nazev);
+    });
+
+    vykresli();
+</script>
 
 </body>
 </html>
